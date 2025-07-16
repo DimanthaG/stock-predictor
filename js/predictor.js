@@ -152,9 +152,37 @@ function parseCSV(csv) {
     return { data };
 }
 
-// File upload handler for CSV and JSON formats
+// Add function to show/hide chart loading
+function showChartLoading(chartId, message = 'Generating chart...') {
+    const container = document.getElementById(chartId).closest('.chart-container');
+    let loading = container.querySelector('.chart-loading');
+    
+    if (!loading) {
+        loading = document.createElement('div');
+        loading.className = 'chart-loading';
+        loading.innerHTML = `
+            <div class="chart-loading-content">
+                <div class="chart-loading-spinner"></div>
+                <div class="chart-loading-text">${message}</div>
+            </div>
+        `;
+        container.appendChild(loading);
+    }
+}
+
+function hideChartLoading(chartId) {
+    const container = document.getElementById(chartId).closest('.chart-container');
+    const loading = container.querySelector('.chart-loading');
+    if (loading) {
+        loading.remove();
+    }
+}
+
+// Also show loading when handling file upload
 async function handleFileUpload(file) {
     try {
+        showChartLoading('historicalChart', 'Processing data...');
+        
         const text = await file.text();
         let result;
         
@@ -169,7 +197,7 @@ async function handleFileUpload(file) {
         
         currentStockData = result.data;
         
-        updateChart();
+        await updateChart();
         document.getElementById('trainButton').disabled = false;
         
     } catch (error) {
@@ -177,6 +205,8 @@ async function handleFileUpload(file) {
         currentStockData = null;
         document.getElementById('trainButton').disabled = true;
         clearCharts();
+    } finally {
+        hideChartLoading('historicalChart');
     }
 }
 
@@ -276,7 +306,7 @@ async function trainAndPredict() {
         console.log('Raw prediction:', prediction);
         
         updateUI(prediction);
-        updateChart(prediction);
+        await updateChart(prediction);
         
     } catch (error) {
         console.error('Training error:', error);
@@ -293,22 +323,17 @@ async function trainAndPredict() {
 
 // Chart management functions
 function clearCharts() {
-    const charts = ['historicalChart', 'predictionChart'];
-    
-    for (const chartId of charts) {
-        const canvas = document.getElementById(chartId);
-        if (!canvas) continue;
-        
-        const ctx = canvas.getContext('2d');
-        
-        // Clear any existing chart
-        if (window[chartId] instanceof Chart) {
-            window[chartId].destroy();
-        }
-        
-        // Clear the canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (window.historicalChart instanceof Chart) {
+        window.historicalChart.destroy();
     }
+    if (window.predictionChart instanceof Chart) {
+        window.predictionChart.destroy();
+    }
+    
+    const historicalCtx = document.getElementById('historicalChart').getContext('2d');
+    const predictionCtx = document.getElementById('predictionChart').getContext('2d');
+    historicalCtx.clearRect(0, 0, historicalCtx.canvas.width, historicalCtx.canvas.height);
+    predictionCtx.clearRect(0, 0, predictionCtx.canvas.width, predictionCtx.canvas.height);
 }
 
 // UI update functions for displaying predictions
@@ -316,115 +341,52 @@ function updateUI(prediction) {
     const lastData = currentStockData[currentStockData.length - 1];
     const trend = prediction.close > lastData.close ? 'Up ↑' : 'Down ↓';
     
-    // Format currency values
-    const formatPrice = (price) => `$${price.toFixed(2)}`;
+    document.getElementById('lastOpen').textContent = `$${lastData.open.toFixed(2)}`;
+    document.getElementById('lastHigh').textContent = `$${lastData.high.toFixed(2)}`;
+    document.getElementById('lastLow').textContent = `$${lastData.low.toFixed(2)}`;
+    document.getElementById('lastClose').textContent = `$${lastData.close.toFixed(2)}`;
     
-    // Update last known values
-    document.getElementById('lastOpen').textContent = formatPrice(lastData.open);
-    document.getElementById('lastHigh').textContent = formatPrice(lastData.high);
-    document.getElementById('lastLow').textContent = formatPrice(lastData.low);
-    document.getElementById('lastClose').textContent = formatPrice(lastData.close);
+    document.getElementById('predictedOpen').textContent = `$${prediction.open.toFixed(2)}`;
+    document.getElementById('predictedHigh').textContent = `$${prediction.high.toFixed(2)}`;
+    document.getElementById('predictedLow').textContent = `$${prediction.low.toFixed(2)}`;
+    document.getElementById('predictedClose').textContent = `$${prediction.close.toFixed(2)}`;
     
-    // Update predicted values
-    document.getElementById('predictedOpen').textContent = formatPrice(prediction.open);
-    document.getElementById('predictedHigh').textContent = formatPrice(prediction.high);
-    document.getElementById('predictedLow').textContent = formatPrice(prediction.low);
-    document.getElementById('predictedClose').textContent = formatPrice(prediction.close);
-    
-    // Update trend with color
-    const trendElement = document.getElementById('predictedTrend');
-    trendElement.textContent = trend;
-    trendElement.style.color = trend === 'Up ↑' ? '#22c55e' : '#ef4444';
-    
-    // Log prediction details
-    console.log('Last known values:', lastData);
-    console.log('Predicted values:', prediction);
-    console.log('Trend:', trend);
+    document.getElementById('predictedTrend').textContent = trend;
+    document.getElementById('predictedTrend').style.color = trend === 'Up ↑' ? 'green' : 'red';
 }
 
-// Chart rendering for historical data and predictions
-function updateChart(prediction = null) {
+// Update the chart rendering function
+async function updateChart(prediction = null) {
     if (!currentStockData) return;
     
+    // Show loading for both charts
+    showChartLoading('historicalChart', 'Generating historical chart...');
+    if (prediction) {
+        showChartLoading('predictionChart', 'Generating prediction chart...');
+    }
+    
+    // Clear existing charts
     clearCharts();
     
-    const historicalCtx = document.getElementById('historicalChart').getContext('2d');
-    const labels = currentStockData.map(item => item.date);
-    const prices = currentStockData.map(item => item.close);
-    
-    window.historicalChart = new Chart(historicalCtx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Historical Price',
-                data: prices,
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1,
-                fill: false
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: false,
-                    title: {
-                        display: true,
-                        text: 'Price ($)'
-                    }
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Historical Stock Prices'
-                }
-            }
-        }
-    });
-    
-    if (prediction !== null) {
-        const predictionCtx = document.getElementById('predictionChart').getContext('2d');
+    try {
+        // Add small delay to ensure loading is visible
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Get the last 10 actual data points
-        const last10Days = labels.slice(-10);
-        const last10Prices = prices.slice(-10);
+        const historicalCtx = document.getElementById('historicalChart').getContext('2d');
+        const labels = currentStockData.map(item => item.date);
+        const prices = currentStockData.map(item => item.close);
         
-        // Calculate the next date for prediction
-        const lastDate = new Date(labels[labels.length - 1]);
-        const nextDate = new Date(lastDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const predictionDate = nextDate.toISOString().split('T')[0];
-        
-        // Create prediction line that connects the last actual price to the predicted price
-        const predictionLine = Array(10).fill(null);
-        predictionLine[9] = last10Prices[last10Prices.length - 1]; // Last actual price
-        predictionLine.push(prediction.close); // Predicted price
-        
-        window.predictionChart = new Chart(predictionCtx, {
+        window.historicalChart = new Chart(historicalCtx, {
             type: 'line',
             data: {
-                labels: [...last10Days, predictionDate],
-                datasets: [
-                    {
-                        label: 'Historical Price',
-                        data: last10Prices,
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1,
-                        fill: false,
-                        pointRadius: 4
-                    },
-                    {
-                        label: 'Prediction',
-                        data: predictionLine,
-                        borderColor: 'rgb(255, 99, 132)',
-                        borderDash: [5, 5],
-                        tension: 0.1,
-                        fill: false,
-                        pointRadius: [0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 6] // Only show points for last actual and prediction
-                    }
-                ]
+                labels: labels,
+                datasets: [{
+                    label: 'Historical Price',
+                    data: prices,
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1,
+                    fill: false
+                }]
             },
             options: {
                 responsive: true,
@@ -440,20 +402,90 @@ function updateChart(prediction = null) {
                 plugins: {
                     title: {
                         display: true,
-                        text: 'Price Prediction (Last 10 Days + Next Day)'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const value = context.raw;
-                                if (value === null) return '';
-                                return `$${value.toFixed(2)}`;
-                            }
-                        }
+                        text: 'Historical Stock Prices'
                     }
                 }
             }
         });
+        
+        // Hide historical chart loading
+        hideChartLoading('historicalChart');
+        
+        if (prediction !== null) {
+            const predictionCtx = document.getElementById('predictionChart').getContext('2d');
+            
+            const last10Days = labels.slice(-10);
+            const last10Prices = prices.slice(-10);
+            
+            const nextDate = new Date(labels[labels.length - 1]);
+            nextDate.setDate(nextDate.getDate() + 1);
+            const predictionDate = nextDate.toISOString().split('T')[0];
+            
+            const predictionLine = new Array(10).fill(null);
+            predictionLine[9] = last10Prices[9];
+            predictionLine.push(prediction.close);
+            
+            window.predictionChart = new Chart(predictionCtx, {
+                type: 'line',
+                data: {
+                    labels: [...last10Days, predictionDate],
+                    datasets: [
+                        {
+                            label: 'Historical Price',
+                            data: last10Prices,
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1,
+                            fill: false,
+                            pointRadius: 4
+                        },
+                        {
+                            label: 'Prediction',
+                            data: predictionLine,
+                            borderColor: 'rgb(255, 99, 132)',
+                            borderDash: [5, 5],
+                            tension: 0.1,
+                            fill: false,
+                            pointRadius: 6,
+                            pointStyle: 'circle'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Price ($)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Price Prediction (Last 10 Days + Prediction)'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    if (value === null) return '';
+                                    return `$${value.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Hide prediction chart loading
+            hideChartLoading('predictionChart');
+        }
+    } catch (error) {
+        console.error('Error generating charts:', error);
+        hideChartLoading('historicalChart');
+        hideChartLoading('predictionChart');
     }
 }
 
