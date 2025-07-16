@@ -53,17 +53,24 @@ function scaleUp(step) {
     };
 }
 
-// Prepare training sequences from raw stock data
+// Prepare training data with size limit and data sampling
 function prepareTrainingData(data) {
-    const scaledData = data.map(scaleDown);
+    // Limit to last 365 days of data to make training manageable
+    const limitedData = data.slice(-365);
+    console.log(`Using last ${limitedData.length} days of data for training`);
+    
+    const scaledData = limitedData.map(scaleDown);
     const trainingData = [];
     
-    for (let i = 0; i < scaledData.length - 5; i += 5) {
-        const sequence = scaledData.slice(i, i + 5);
-        if (sequence.length === 5) {
+    // Use smaller sequences (3 days instead of 5) and take every other sequence
+    for (let i = 0; i < scaledData.length - 3; i += 2) {
+        const sequence = scaledData.slice(i, i + 3);
+        if (sequence.length === 3) {
             trainingData.push(sequence);
         }
     }
+    
+    console.log(`Generated ${trainingData.length} training sequences`);
     return trainingData;
 }
 
@@ -248,10 +255,6 @@ async function trainAndPredict() {
     };
     
     try {
-        if (!Array.isArray(currentStockData) || currentStockData.length < 5) {
-            throw new Error(`Invalid data format. Need at least 5 data points, got ${currentStockData.length}`);
-        }
-
         const trainingData = prepareTrainingData(currentStockData);
         
         if (trainingData.length === 0) {
@@ -259,13 +262,14 @@ async function trainAndPredict() {
         }
 
         let currentIteration = 0;
+        const maxIterations = 100; // Reduce iterations for faster training
         
         await new Promise((resolve, reject) => {
             try {
                 net.train(trainingData, {
-                    learningRate: 0.005,
-                    errorThresh: 0.02,
-                    iterations: 1000,
+                    learningRate: 0.01, // Increased learning rate
+                    errorThresh: 0.05, // Increased error threshold
+                    iterations: maxIterations,
                     log: (stats) => {
                         currentIteration++;
                         const error = typeof stats === 'object' ? stats.error : stats;
@@ -274,15 +278,20 @@ async function trainAndPredict() {
                         const details = document.getElementById('training-details');
                         
                         if (progress) {
-                            const percent = Math.round((currentIteration / 1000) * 100);
+                            const percent = Math.round((currentIteration / maxIterations) * 100);
                             progress.textContent = `${percent}%`;
                         }
                         
                         if (details && typeof error === 'number') {
-                            details.textContent = `Iteration ${currentIteration}/1000: error = ${error.toFixed(4)}`;
+                            details.textContent = `Iteration ${currentIteration}/${maxIterations}: error = ${error.toFixed(4)}`;
+                        }
+                        
+                        // Force UI update
+                        if (currentIteration % 5 === 0) {
+                            setTimeout(() => {}, 0);
                         }
                     },
-                    logPeriod: 10
+                    logPeriod: 1 // Log every iteration
                 });
                 resolve();
             } catch (error) {
@@ -290,13 +299,12 @@ async function trainAndPredict() {
             }
         });
         
+        // Use last 3 days for prediction instead of 5
         const lastSequence = trainingData[trainingData.length - 1];
         const prediction = scaleUp(net.run(lastSequence));
         
         updateUI(prediction);
         updateChart(prediction);
-        
-        setTimeout(cleanup, 100);
         
     } catch (error) {
         console.error('Training error:', error);
@@ -305,7 +313,10 @@ async function trainAndPredict() {
             errorDisplay.textContent = error.message;
         }
         setTimeout(cleanup, 3000);
+        return;
     }
+    
+    cleanup();
 }
 
 // Chart management functions
