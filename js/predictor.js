@@ -8,7 +8,6 @@ function initializeNetwork() {
     
     if (typeof brain === 'undefined') {
         console.error('Brain.js is not loaded yet. Retrying in 500ms...');
-        // Retry in 500ms
         setTimeout(initializeNetwork, 500);
         return;
     }
@@ -23,7 +22,6 @@ function initializeNetwork() {
         console.log('Neural network initialized successfully');
     } catch (error) {
         console.error('Failed to initialize neural network:', error);
-        // Retry in 500ms in case of error
         setTimeout(initializeNetwork, 500);
     }
 }
@@ -37,40 +35,37 @@ window.addEventListener('load', initializeNetwork);
 // Data normalization functions for neural network input/output
 function scaleDown(step) {
     return {
-        open: step.open / window.maxPrice,
-        high: step.high / window.maxPrice,
-        low: step.low / window.maxPrice,
-        close: step.close / window.maxPrice
+        open: step.open / 138,
+        high: step.high / 138,
+        low: step.low / 138,
+        close: step.close / 138
     };
 }
 
 function scaleUp(step) {
     return {
-        open: step.open * window.maxPrice,
-        high: step.high * window.maxPrice,
-        low: step.low * window.maxPrice,
-        close: step.close * window.maxPrice
+        open: step.open * 138,
+        high: step.high * 138,
+        low: step.low * 138,
+        close: step.close * 138
     };
 }
 
-// Prepare training data with size limit and data sampling
+// Prepare training data with non-overlapping sequences
 function prepareTrainingData(data) {
-    // Limit to last 365 days of data to make training manageable
-    const limitedData = data.slice(-365);
-    console.log(`Using last ${limitedData.length} days of data for training`);
-    
-    const scaledData = limitedData.map(scaleDown);
+    console.log('Preparing training data from', data.length, 'entries');
+    const scaledData = data.map(scaleDown);
     const trainingData = [];
     
-    // Use smaller sequences (3 days instead of 5) and take every other sequence
-    for (let i = 0; i < scaledData.length - 3; i += 2) {
-        const sequence = scaledData.slice(i, i + 3);
-        if (sequence.length === 3) {
+    // Create non-overlapping sequences of 5 days each
+    for (let i = 0; i < scaledData.length - 5; i += 5) {
+        const sequence = scaledData.slice(i, i + 5);
+        if (sequence.length === 5) {
             trainingData.push(sequence);
         }
     }
     
-    console.log(`Generated ${trainingData.length} training sequences`);
+    console.log('Generated', trainingData.length, 'training sequences');
     return trainingData;
 }
 
@@ -100,25 +95,6 @@ function parseCSV(csv) {
     
     const data = [];
     let errorLines = [];
-    let maxPrice = 0;
-    
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        const values = line.split(',').map(v => v.trim().replace('$', ''));
-        const prices = [
-            parseFloat(values[openIndex]),
-            parseFloat(values[highIndex]),
-            parseFloat(values[lowIndex]),
-            parseFloat(values[closeIndex])
-        ];
-        
-        const validPrices = prices.filter(p => !isNaN(p) && p > 0);
-        if (validPrices.length === 4) {
-            maxPrice = Math.max(maxPrice, ...validPrices);
-        }
-    }
     
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -173,7 +149,7 @@ function parseCSV(csv) {
     }
     
     data.sort((a, b) => new Date(a.date) - new Date(b.date));
-    return { data, maxPrice };
+    return { data };
 }
 
 // File upload handler for CSV and JSON formats
@@ -186,14 +162,12 @@ async function handleFileUpload(file) {
             result = parseCSV(text);
         } else if (file.name.endsWith('.json')) {
             const jsonData = JSON.parse(text);
-            const maxPrice = Math.max(...jsonData.flatMap(d => [d.open, d.high, d.low, d.close]));
-            result = { data: jsonData, maxPrice };
+            result = { data: jsonData };
         } else {
             throw new Error('Unsupported file format');
         }
         
         currentStockData = result.data;
-        window.maxPrice = result.maxPrice;
         
         updateChart();
         document.getElementById('trainButton').disabled = false;
@@ -262,14 +236,13 @@ async function trainAndPredict() {
         }
 
         let currentIteration = 0;
-        const maxIterations = 100; // Reduce iterations for faster training
         
         await new Promise((resolve, reject) => {
             try {
                 net.train(trainingData, {
-                    learningRate: 0.01, // Increased learning rate
-                    errorThresh: 0.05, // Increased error threshold
-                    iterations: maxIterations,
+                    learningRate: 0.005,
+                    errorThresh: 0.02,
+                    iterations: 1000,
                     log: (stats) => {
                         currentIteration++;
                         const error = typeof stats === 'object' ? stats.error : stats;
@@ -278,20 +251,15 @@ async function trainAndPredict() {
                         const details = document.getElementById('training-details');
                         
                         if (progress) {
-                            const percent = Math.round((currentIteration / maxIterations) * 100);
+                            const percent = Math.round((currentIteration / 1000) * 100);
                             progress.textContent = `${percent}%`;
                         }
                         
                         if (details && typeof error === 'number') {
-                            details.textContent = `Iteration ${currentIteration}/${maxIterations}: error = ${error.toFixed(4)}`;
-                        }
-                        
-                        // Force UI update
-                        if (currentIteration % 5 === 0) {
-                            setTimeout(() => {}, 0);
+                            details.textContent = `Iteration ${currentIteration}/1000: error = ${error.toFixed(4)}`;
                         }
                     },
-                    logPeriod: 1 // Log every iteration
+                    logPeriod: 10
                 });
                 resolve();
             } catch (error) {
@@ -299,9 +267,13 @@ async function trainAndPredict() {
             }
         });
         
-        // Use last 3 days for prediction instead of 5
+        // Get the last sequence for prediction
         const lastSequence = trainingData[trainingData.length - 1];
+        console.log('Last sequence for prediction:', lastSequence);
+        
+        // Run prediction
         const prediction = scaleUp(net.run(lastSequence));
+        console.log('Raw prediction:', prediction);
         
         updateUI(prediction);
         updateChart(prediction);
