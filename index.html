@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Price Predictor</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- Brain.js CDN -->
-    <script src="https://unpkg.com/brain.js"></script>
+    <!-- Brain.js CDN with specific version and integrity check -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/brain.js/2.0.0-beta.23/brain-browser.min.js" integrity="sha512-/c+TUHqvjhQG4yS+gJKFhXg+cXxKhBMVR8VHxn7pegF4Zg3F6vV2bGgZzCt+MqNu9cYSkC3snRGxVr7HUOXXrA==" crossorigin="anonymous"></script>
     <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -90,6 +90,28 @@ date,open,high,low,close
         </div>
     </div>
 
-    <script src="js/predictor.js"></script>
+    <!-- Move script to end of body and add defer -->
+    <script src="js/predictor.js" defer></script>
+    <script>
+        // Add debug logging
+        window.addEventListener('load', () => {
+            console.log('Window loaded');
+            const trainButton = document.getElementById('trainButton');
+            if (trainButton) {
+                console.log('Train button found');
+                trainButton.addEventListener('click', async () => {
+                    console.log('Train button clicked');
+                    try {
+                        await trainAndPredict();
+                    } catch (error) {
+                        console.error('Training failed:', error);
+                        alert('Training failed: ' + error.message);
+                    }
+                });
+            } else {
+                console.error('Train button not found');
+            }
+        });
+    </script>
 </body>
 </html>

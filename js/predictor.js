@@ -1,11 +1,17 @@
 // Global state and neural network initialization
 let currentStockData = null;
+let net = null;
 
-const net = new brain.recurrent.LSTMTimeStep({
-    inputSize: 4,
-    hiddenLayers: [8, 8],
-    outputSize: 4
-});
+// Initialize brain.js network with error handling
+try {
+    net = new brain.recurrent.LSTMTimeStep({
+        inputSize: 4,
+        hiddenLayers: [8, 8],
+        outputSize: 4
+    });
+} catch (error) {
+    console.error('Failed to initialize neural network:', error);
+}
 
 // Data normalization functions for neural network input/output
 function scaleDown(step) {
@@ -174,10 +180,21 @@ async function handleFileUpload(file) {
 
 // Main training and prediction function
 async function trainAndPredict() {
+    console.log('Training started...');
+    
+    if (!net) {
+        const error = 'Neural network not initialized. Brain.js may not have loaded correctly.';
+        console.error(error);
+        alert(error);
+        return;
+    }
+    
     if (!currentStockData) {
         alert('Please upload data first');
         return;
     }
+    
+    console.log('Current stock data:', currentStockData.length, 'entries');
     
     const existingOverlay = document.querySelector('.loading-overlay');
     if (existingOverlay) {
