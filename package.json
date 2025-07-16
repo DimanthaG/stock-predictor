@@ -1,0 +1,12 @@
+{
+  "name": "stock-predictor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "serve",
+    "build": "echo 'No build step required'"
+  },
+  "dependencies": {
+    "serve": "^14.2.1"
+  }
+}

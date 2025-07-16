@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Price Predictor</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Brain.js CDN -->
+    <script src="https://unpkg.com/brain.js"></script>
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Stock Price Predictor</h1>
+        
+        <div class="data-input-section">
+            <h2>Data Input</h2>
+            <div class="input-controls">
+                <p>Upload your stock price data file:</p>
+                <input type="file" id="dataFile" accept=".csv,.json">
+                <p class="help-text">Supported formats:</p>
+                <ul class="format-list">
+                    <li>CSV with headers: date,open,high,low,close</li>
+                    <li>JSON array of objects: [{date, open, high, low, close}]</li>
+                </ul>
+                <div class="example-format">
+                    <p class="help-text">Example CSV format:</p>
+                    <pre>
+date,open,high,low,close
+2023-01-01,150.25,152.50,149.75,151.50
+2023-01-02,151.75,153.25,151.00,152.75
+2023-01-03,152.50,154.00,152.00,153.50
+...at least 50 rows</pre>
+                    <p class="help-text">Requirements:</p>
+                    <ul class="format-list">
+                        <li>At least 50 data points</li>
+                        <li>Dates in YYYY-MM-DD format</li>
+                        <li>All prices must be positive numbers</li>
+                        <li>High must be highest price of the day</li>
+                        <li>Low must be lowest price of the day</li>
+                        <li>Data sorted by date (automatic)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="prediction-section">
+            <h2>Historical Data</h2>
+            <div class="chart-container">
+                <canvas id="historicalChart"></canvas>
+            </div>
+            
+            <div class="results">
+                <h3>Prediction Results</h3>
+                <div class="price-grid">
+                    <div class="price-row">
+                        <div class="price-label">Last Known:</div>
+                        <div class="price-values">
+                            <div>Open: <span id="lastOpen">-</span></div>
+                            <div>High: <span id="lastHigh">-</span></div>
+                            <div>Low: <span id="lastLow">-</span></div>
+                            <div>Close: <span id="lastClose">-</span></div>
+                        </div>
+                    </div>
+                    <div class="price-row">
+                        <div class="price-label">Predicted:</div>
+                        <div class="price-values">
+                            <div>Open: <span id="predictedOpen">-</span></div>
+                            <div>High: <span id="predictedHigh">-</span></div>
+                            <div>Low: <span id="predictedLow">-</span></div>
+                            <div>Close: <span id="predictedClose">-</span></div>
+                        </div>
+                    </div>
+                    <div class="trend-row">
+                        <div class="price-label">Trend:</div>
+                        <div class="price-values">
+                            <span id="predictedTrend">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Prediction Trend</h2>
+            <div class="chart-container">
+                <canvas id="predictionChart"></canvas>
+            </div>
+            
+            <button id="trainButton" disabled>Train Model & Predict</button>
+        </div>
+    </div>
+
+    <script src="js/predictor.js"></script>
+</body>
+</html>
