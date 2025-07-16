@@ -266,3 +266,72 @@ button:disabled {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Add responsive breakpoints */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+        margin: 0;
+        border-radius: 0;
+    }
+    
+    .chart-container {
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .price-grid {
+        padding: 10px;
+    }
+    
+    .price-row, .trend-row {
+        flex-direction: column;
+    }
+    
+    .price-label {
+        flex: none;
+        margin-bottom: 5px;
+    }
+    
+    .price-values {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .format-list {
+        width: 100%;
+    }
+    
+    .example-format {
+        max-width: 100%;
+    }
+    
+    button {
+        width: 100%;
+        max-width: 300px;
+    }
+}
+
+/* Optimize for performance */
+.chart-container canvas {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+.loading-spinner {
+    will-change: transform;
+    transform: translateZ(0);
+}
+
+/* Reduce animation complexity on mobile */
+@media (max-width: 768px) {
+    .loading-spinner {
+        width: 30px;
+        height: 30px;
+        border-width: 3px;
+    }
+    
+    .chart-loading-text {
+        font-size: 12px;
+    }
+}

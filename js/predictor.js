@@ -1,36 +1,66 @@
-// Global state and neural network initialization
+// Global state
 let currentStockData = null;
-let net = null;
+let worker = null;
 
-// Initialize brain.js network with error handling and retry
-function initializeNetwork() {
-    if (net !== null) return; // Already initialized
-    
-    if (typeof brain === 'undefined') {
-        console.error('Brain.js is not loaded yet. Retrying in 500ms...');
-        setTimeout(initializeNetwork, 500);
-        return;
+// Initialize Web Worker
+function initializeWorker() {
+    if (worker) {
+        worker.terminate();
     }
     
-    try {
-        console.log('Initializing neural network...');
-        net = new brain.recurrent.LSTMTimeStep({
-            inputSize: 4,
-            hiddenLayers: [8, 8],
-            outputSize: 4
-        });
-        console.log('Neural network initialized successfully');
-    } catch (error) {
-        console.error('Failed to initialize neural network:', error);
-        setTimeout(initializeNetwork, 500);
-    }
+    worker = new Worker('js/trainWorker.js');
+    
+    worker.onmessage = function(e) {
+        const { type, ...data } = e.data;
+        
+        switch (type) {
+            case 'initialized':
+                console.log('Worker initialized:', data.success);
+                break;
+                
+            case 'progress':
+                const progress = document.getElementById('progress');
+                const details = document.getElementById('training-details');
+                
+                if (progress) {
+                    progress.textContent = `${data.percent}%`;
+                }
+                
+                if (details) {
+                    details.textContent = `Iteration ${data.iteration}/1000: error = ${data.error.toFixed(4)}`;
+                }
+                break;
+                
+            case 'complete':
+                console.log('Training complete, prediction:', data.prediction);
+                updateUI(data.prediction);
+                updateChart(data.prediction);
+                cleanup();
+                break;
+                
+            case 'error':
+                console.error('Training error:', data.message);
+                const errorDisplay = document.getElementById('error-display');
+                if (errorDisplay) {
+                    errorDisplay.textContent = data.message;
+                }
+                setTimeout(cleanup, 3000);
+                break;
+        }
+    };
+    
+    worker.onerror = function(error) {
+        console.error('Worker error:', error);
+        alert('An error occurred during training. Please try again.');
+        cleanup();
+    };
+    
+    // Initialize the worker
+    worker.postMessage({ type: 'init' });
 }
 
-// Try to initialize immediately
-initializeNetwork();
-
-// Also try on window load in case the script loaded before brain.js
-window.addEventListener('load', initializeNetwork);
+// Initialize worker when page loads
+window.addEventListener('load', initializeWorker);
 
 // Data normalization functions for neural network input/output
 function scaleDown(step) {
@@ -210,16 +240,9 @@ async function handleFileUpload(file) {
     }
 }
 
-// Main training and prediction function
+// Main training function
 async function trainAndPredict() {
     console.log('Training started...');
-    
-    if (!net) {
-        const error = 'Neural network not initialized. Brain.js may not have loaded correctly.';
-        console.error(error);
-        alert(error);
-        return;
-    }
     
     if (!currentStockData) {
         alert('Please upload data first');
@@ -248,77 +271,30 @@ async function trainAndPredict() {
     const trainButton = document.getElementById('trainButton');
     trainButton.disabled = true;
     
-    const cleanup = () => {
-        const overlay = document.querySelector('.loading-overlay');
-        if (overlay && overlay.parentNode) {
-            overlay.parentNode.removeChild(overlay);
-        }
-        if (trainButton) {
-            trainButton.disabled = false;
-        }
-    };
-    
     try {
-        const trainingData = prepareTrainingData(currentStockData);
-        
-        if (trainingData.length === 0) {
-            throw new Error('No valid training sequences generated');
-        }
-
-        let currentIteration = 0;
-        
-        await new Promise((resolve, reject) => {
-            try {
-                net.train(trainingData, {
-                    learningRate: 0.005,
-                    errorThresh: 0.02,
-                    iterations: 1000,
-                    log: (stats) => {
-                        currentIteration++;
-                        const error = typeof stats === 'object' ? stats.error : stats;
-                        
-                        const progress = document.getElementById('progress');
-                        const details = document.getElementById('training-details');
-                        
-                        if (progress) {
-                            const percent = Math.round((currentIteration / 1000) * 100);
-                            progress.textContent = `${percent}%`;
-                        }
-                        
-                        if (details && typeof error === 'number') {
-                            details.textContent = `Iteration ${currentIteration}/1000: error = ${error.toFixed(4)}`;
-                        }
-                    },
-                    logPeriod: 10
-                });
-                resolve();
-            } catch (error) {
-                reject(error);
-            }
+        // Start training in worker
+        worker.postMessage({
+            type: 'train',
+            data: currentStockData
         });
-        
-        // Get the last sequence for prediction
-        const lastSequence = trainingData[trainingData.length - 1];
-        console.log('Last sequence for prediction:', lastSequence);
-        
-        // Run prediction
-        const prediction = scaleUp(net.run(lastSequence));
-        console.log('Raw prediction:', prediction);
-        
-        updateUI(prediction);
-        await updateChart(prediction);
-        
     } catch (error) {
-        console.error('Training error:', error);
-        const errorDisplay = document.getElementById('error-display');
-        if (errorDisplay) {
-            errorDisplay.textContent = error.message;
-        }
-        setTimeout(cleanup, 3000);
-        return;
+        console.error('Error starting training:', error);
+        cleanup();
+        alert('Failed to start training. Please try again.');
+    }
+}
+
+// Cleanup function
+function cleanup() {
+    const overlay = document.querySelector('.loading-overlay');
+    if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
     }
     
-    cleanup();
+    const trainButton = document.getElementById('trainButton');
+    if (trainButton) {
+        trainButton.disabled = false;
+    }
 }
 
 // Chart management functions
