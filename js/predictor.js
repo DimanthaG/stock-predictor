@@ -2,16 +2,37 @@
 let currentStockData = null;
 let net = null;
 
-// Initialize brain.js network with error handling
-try {
-    net = new brain.recurrent.LSTMTimeStep({
-        inputSize: 4,
-        hiddenLayers: [8, 8],
-        outputSize: 4
-    });
-} catch (error) {
-    console.error('Failed to initialize neural network:', error);
+// Initialize brain.js network with error handling and retry
+function initializeNetwork() {
+    if (net !== null) return; // Already initialized
+    
+    if (typeof brain === 'undefined') {
+        console.error('Brain.js is not loaded yet. Retrying in 500ms...');
+        // Retry in 500ms
+        setTimeout(initializeNetwork, 500);
+        return;
+    }
+    
+    try {
+        console.log('Initializing neural network...');
+        net = new brain.recurrent.LSTMTimeStep({
+            inputSize: 4,
+            hiddenLayers: [8, 8],
+            outputSize: 4
+        });
+        console.log('Neural network initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize neural network:', error);
+        // Retry in 500ms in case of error
+        setTimeout(initializeNetwork, 500);
+    }
 }
+
+// Try to initialize immediately
+initializeNetwork();
+
+// Also try on window load in case the script loaded before brain.js
+window.addEventListener('load', initializeNetwork);
 
 // Data normalization functions for neural network input/output
 function scaleDown(step) {
